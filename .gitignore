@@ -1,0 +1,5 @@
+*.o
+benchmark
+compare
+test_allocator
+test_orig
