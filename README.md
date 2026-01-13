@@ -1,10 +1,11 @@
 # OpenAlloc - Fast Memory Allocator
 
-A high-performance, single-file memory allocator for C.
+A high-performance, single-file memory allocator for C with hardened security features.
 
 ## Features
 
 - **Segregated Free Lists** (default) - ~3x faster than glibc malloc
+- **Hardened Security** - Double-free detection, memory poisoning, header corruption checks
 - **Simplified API** - Just `init`, `malloc`, `free`, `realloc`
 - **No External Dependencies** - Pure C standard library
 - **Single-Threaded** - Fast, predictable, no locks
@@ -70,6 +71,16 @@ make run-test           # Run tests (current build)
 make run-benchmark       # Run benchmark (current build)
 ```
 
+## Security Features (Hardened Version)
+
+The hardened version includes critical security protections:
+
+1. **Double-Free Detection** - Aborts on attempt to free the same block twice
+2. **Memory Poisoning** - Freed blocks are filled with `0x5A` to detect use-after-free
+3. **Header Corruption Detection** - Magic number (`0xDEADBEEF`) in block headers prevents use of corrupted/misallocated pointers
+
+These security features add minimal overhead (4 bytes per block) while preventing common memory safety vulnerabilities.
+
 ## Architecture
 
 ### Segregated Allocator (Default)
@@ -96,7 +107,7 @@ typedef struct block_header {
     size_t size;           // Block size (excluding header)
     struct block_header* next; // Next block in free list
     uint8_t free;           // Is block free? (0=no, 1=yes)
-    uint8_t pad[7];        // Padding to 16-byte alignment
+    uint32_t magic;         // Magic number for corruption detection (0xDEADBEEF)
 } block_header_t;
 ```
 

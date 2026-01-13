@@ -27,6 +27,9 @@ void openalloc_get_stats(openalloc_stats_t* stats);
 #define OPENALLOC_ALIGN 8
 #define OPENALLOC_MIN_BLOCK (sizeof(size_t) * 2)
 
+#define OPENALLOC_MAGIC 0xDEADBEEF
+#define OPENALLOC_POISON 0x5A
+
 #ifdef __cplusplus
 }
 #endif

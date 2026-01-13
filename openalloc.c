@@ -6,13 +6,23 @@
 #define LIKELY(x) __builtin_expect(!!(x), 1)
 #define UNLIKELY(x) __builtin_expect(!!(x), 0)
 
-#define BLOCK_HEADER_SIZE 16
+#define BLOCK_HEADER_SIZE 24
+
+#define OPENALLOC_MAGIC 0xDEADBEEF
+#define OPENALLOC_POISON 0x5A
 
 typedef struct block_header {
     size_t size;
     struct block_header* next;
     uint8_t free;
+    uint32_t magic;
 } block_header_t;
+
+#ifdef __cplusplus
+#include <cstdlib>
+#else
+#include <stdlib.h>
+#endif
 
 #ifdef OPENALLOC_NO_SEG
 
@@ -26,7 +36,7 @@ typedef struct block_header_doubly {
     struct block_header_doubly* next;
     struct block_header_doubly* prev;
     uint8_t free;
-    uint8_t pad[3];
+    uint32_t magic;
 } block_header_doubly_t;
 
 static block_header_doubly_t* free_list = NULL;
@@ -45,11 +55,18 @@ static void* get_data_doubly(block_header_doubly_t* block) {
     return (uint8_t*)block + sizeof(block_header_doubly_t);
 }
 
+static inline void verify_block_doubly(block_header_doubly_t* block) {
+    if (UNLIKELY(block->magic != OPENALLOC_MAGIC)) {
+        abort();
+    }
+}
+
 static void split_block_doubly(block_header_doubly_t* block, size_t size) {
     if (block->size - size >= OPENALLOC_MIN_BLOCK + sizeof(block_header_doubly_t)) {
         block_header_doubly_t* new_block = (block_header_doubly_t*)((uint8_t*)block + sizeof(block_header_doubly_t) + size);
         new_block->size = block->size - size - sizeof(block_header_doubly_t);
         new_block->free = 1;
+        new_block->magic = 0;
         new_block->next = NULL;
         new_block->prev = NULL;
         
@@ -118,6 +135,7 @@ int openalloc_init(void* heap_ptr, size_t size) {
     free_list = (block_header_doubly_t*)heap_start;
     free_list->size = size - sizeof(block_header_doubly_t);
     free_list->free = 1;
+    free_list->magic = 0;
     free_list->next = NULL;
     free_list->prev = NULL;
     
@@ -134,6 +152,7 @@ void* openalloc_malloc(size_t size) {
         if (block->free && block->size >= aligned_size) {
             split_block_doubly(block, aligned_size);
             block->free = 0;
+            block->magic = OPENALLOC_MAGIC;
             
             if (block->prev) {
                 block->prev->next = block->next;
@@ -158,8 +177,17 @@ void openalloc_free(void* ptr) {
     if (!ptr) return;
     
     block_header_doubly_t* block = get_block_doubly(ptr);
+    verify_block_doubly(block);
+    
+    if (UNLIKELY(block->free)) {
+        abort();
+    }
     
     block->free = 1;
+    block->magic = 0;
+    
+    memset(get_data_doubly(block), OPENALLOC_POISON, block->size);
+    
     coalesce_block_doubly(block);
     
     block->next = free_list;
@@ -201,6 +229,12 @@ static inline void* get_data(block_header_t* block) {
     return (uint8_t*)block + sizeof(block_header_t);
 }
 
+static inline void verify_block(block_header_t* block) {
+    if (UNLIKELY(block->magic != OPENALLOC_MAGIC)) {
+        abort();
+    }
+}
+
 int openalloc_init(void* heap_ptr, size_t size) {
     if (!heap_ptr || size < OPENALLOC_MIN_BLOCK + sizeof(block_header_t)) {
         return -1;
@@ -216,6 +250,7 @@ int openalloc_init(void* heap_ptr, size_t size) {
     block_header_t* block = (block_header_t*)heap_start;
     block->size = size - sizeof(block_header_t);
     block->free = 1;
+    block->magic = 0;
     block->next = NULL;
     free_lists[NUM_BINS - 1] = block;
     
@@ -240,6 +275,7 @@ void* openalloc_malloc(size_t size) {
                     block_header_t* new_block = (block_header_t*)((uint8_t*)block + sizeof(block_header_t) + aligned_size);
                     new_block->size = block->size - aligned_size - sizeof(block_header_t);
                     new_block->free = 1;
+                    new_block->magic = 0;
                     new_block->next = original_next;
                     
                     block->size = aligned_size;
@@ -257,6 +293,7 @@ void* openalloc_malloc(size_t size) {
                 }
                 
                 block->free = 0;
+                block->magic = OPENALLOC_MAGIC;
                 *prev = original_next;
                 block->next = NULL;
                 
@@ -274,7 +311,16 @@ void openalloc_free(void* ptr) {
     if (UNLIKELY(!ptr)) return;
     
     block_header_t* block = get_block(ptr);
+    verify_block(block);
+    
+    if (UNLIKELY(block->free)) {
+        abort();
+    }
+    
     block->free = 1;
+    block->magic = 0;
+    
+    memset(get_data(block), OPENALLOC_POISON, block->size);
     
     int bin = get_bin(block->size);
     block->next = free_lists[bin];
