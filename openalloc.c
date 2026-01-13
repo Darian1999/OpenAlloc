@@ -8,7 +8,7 @@
 
 #define BLOCK_HEADER_SIZE 24
 
-#define OPENALLOC_MAGIC 0xDEADBEEF
+#define OPENALLOC_MAGIC 0x3AB640B4
 #define OPENALLOC_POISON 0x5A
 
 typedef struct block_header {

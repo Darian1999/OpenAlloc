@@ -107,7 +107,7 @@ typedef struct block_header {
     size_t size;           // Block size (excluding header)
     struct block_header* next; // Next block in free list
     uint8_t free;           // Is block free? (0=no, 1=yes)
-    uint32_t magic;         // Magic number for corruption detection (0xDEADBEEF)
+    uint32_t magic;         // Magic number for corruption detection (0x3AB640B4)
 } block_header_t;
 ```
 
